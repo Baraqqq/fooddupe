@@ -1,0 +1,43 @@
+{
+  "name": "fooddupe",
+  "version": "1.0.0",
+  "description": "SaaS Food Ordering Platform",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "services/*", 
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "dev:docker": "docker-compose up -d",
+    "db:reset": "cd packages/database && npm run db:reset",
+    "db:studio": "cd packages/database && npm run db:studio",
+    "setup": "npm install && npm run db:reset"
+  },
+  "devDependencies": {
+    "turbo": "^1.13.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "concurrently": "^8.2.0",
+    "tsx": "^4.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "turbo run dev --parallel",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "clean": "turbo run clean",
+    "dev:docker": "docker-compose up -d",
+    "dev:full": "npm run dev:docker && sleep 10 && npm run db:reset && npm run dev",
+    "db:reset": "cd packages/database && npm run db:reset",
+    "db:studio": "cd packages/database && npm run db:studio",
+    "setup": "npm install && npm run dev:docker && sleep 10 && npm run db:reset"
+      }
+}

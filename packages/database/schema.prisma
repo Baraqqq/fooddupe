@@ -1,0 +1,338 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// MULTI-TENANT CORE MODELS
+// ============================================
+
+model Tenant {
+  id          String   @id @default(uuid())
+  name        String   // "Pizza Mario"
+  subdomain   String   @unique // "pizzamario"
+  email       String
+  phone       String?
+  status      TenantStatus @default(TRIAL)
+  plan        String   @default("starter") // starter, pro, enterprise
+  trialEndsAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  locations   Location[]
+  users       User[]
+  products    Product[]
+  categories  Category[]
+  orders      Order[]
+  customers   Customer[]
+  settings    TenantSettings?
+
+  @@map("tenants")
+}
+
+model TenantSettings {
+  id                    String  @id @default(uuid())
+  tenantId              String  @unique
+  tenant                Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  // Business settings
+  currency              String  @default("EUR")
+  timezone              String  @default("Europe/Amsterdam")
+  language              String  @default("nl")
+  
+  // Ordering settings
+  deliveryFee           Float   @default(2.50)
+  freeDeliveryThreshold Float   @default(20.00)
+  taxRate               Float   @default(0.21)
+  
+  // Branding
+  logoUrl               String?
+  primaryColor          String  @default("#dc2626")
+  accentColor           String  @default("#fbbf24")
+  
+  // Features
+  enableDelivery        Boolean @default(true)
+  enablePickup          Boolean @default(true)
+  enableOnlinePayment   Boolean @default(true)
+  enableCashPayment     Boolean @default(true)
+  
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("tenant_settings")
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  CANCELLED
+}
+
+// ============================================
+// USER MANAGEMENT
+// ============================================
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String?
+  tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  email        String   @unique
+  firstName    String
+  lastName     String
+  passwordHash String
+  role         UserRole
+  isActive     Boolean  @default(true)
+  
+  // Optional location assignment
+  locationId   String?
+  location     Location? @relation(fields: [locationId], references: [id])
+  
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("users")
+}
+
+enum UserRole {
+  OWNER       // Full access to tenant
+  MANAGER     // Can manage locations
+  EMPLOYEE    // POS access only
+  SUPERADMIN  // Platform admin
+}
+
+// ============================================
+// RESTAURANT STRUCTURE
+// ============================================
+
+model Location {
+  id        String  @id @default(uuid())
+  tenantId  String
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  name      String  // "Pizza Mario Centrum"
+  address   String
+  city      String
+  postalCode String
+  phone     String?
+  email     String?
+  
+  isActive  Boolean @default(true)
+  
+  // Relations
+  users     User[]
+  orders    Order[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("locations")
+}
+
+// ============================================
+// PRODUCT CATALOG
+// ============================================
+
+model Category {
+  id        String    @id @default(uuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  name      String    // "Pizza's"
+  slug      String    // "pizzas"
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  
+  // Relations
+  products  Product[]
+  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([tenantId, slug])
+  @@map("categories")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id])
+  
+  name        String   // "Margherita"
+  description String?  // "Tomaten, mozzarella, basilicum"
+  price       Float    // 12.50
+  imageUrl    String?
+  
+  isActive    Boolean  @default(true)
+  isPopular   Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  
+  // Relations
+  orderItems  OrderItem[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("products")
+}
+
+// ============================================
+// CUSTOMER MANAGEMENT
+// ============================================
+
+model Customer {
+  id         String  @id @default(uuid())
+  tenantId   String
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  email      String
+  firstName  String?
+  lastName   String?
+  phone      String?
+  
+  // Default delivery address
+  address    String?
+  city       String?
+  postalCode String?
+  
+  // Relations
+  orders     Order[]
+  
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([tenantId, email])
+  @@map("customers")
+}
+
+// ============================================
+// ORDER MANAGEMENT
+// ============================================
+
+model Order {
+  id           String      @id @default(uuid())
+  tenantId     String
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  
+  locationId   String?
+  location     Location?   @relation(fields: [locationId], references: [id])
+  
+  customerId   String
+  customer     Customer    @relation(fields: [customerId], references: [id])
+  
+  orderNumber  String      // "PZM-001234"
+  status       OrderStatus @default(PENDING)
+  type         OrderType   @default(DELIVERY)
+  source       OrderSource @default(WEBSITE)
+  
+  // Pricing
+  subtotal     Float
+  deliveryFee  Float       @default(0)
+  tax          Float
+  total        Float
+  
+  // Customer info snapshot
+  customerName  String
+  customerEmail String
+  customerPhone String
+  
+  // Delivery info
+  deliveryAddress String?
+  deliveryCity    String?
+  deliveryPostal  String?
+  deliveryNotes   String?
+  
+  // Payment info
+  paymentMethod   PaymentMethod?
+  paymentStatus   PaymentStatus @default(PENDING)
+  paymentIntentId String?       // Stripe payment intent
+  cashAmount      Float?        // For cash payments
+  
+  // Timing
+  estimatedTime   Int?          // Minutes
+  scheduledFor    DateTime?     // For scheduled orders
+  
+  notes           String?
+  
+  // Relations
+  items           OrderItem[]
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([tenantId, orderNumber])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  
+  name      String  // Product name snapshot
+  price     Float   // Price snapshot
+  quantity  Int
+  notes     String?
+  
+  createdAt DateTime @default(now())
+
+  @@map("order_items")
+}
+
+enum OrderStatus {
+  PENDING     // Order placed, awaiting payment
+  PAID        // Payment confirmed
+  CONFIRMED   // Restaurant confirmed
+  PREPARING   // Kitchen is working on it
+  READY       // Ready for pickup/delivery
+  OUT_FOR_DELIVERY // Driver picked up
+  DELIVERED   // Successfully delivered
+  COMPLETED   // Order finished
+  CANCELLED   // Order cancelled
+}
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+  DINE_IN
+}
+
+enum OrderSource {
+  WEBSITE     // Customer website
+  POS         // In-store POS
+  PHONE       // Phone order
+  THUISBEZORGD // External platform
+  UBEREATS    // External platform
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  IDEAL
+  PAYPAL
+  BANCONTACT
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+}

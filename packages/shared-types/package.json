@@ -1,0 +1,11 @@
+{
+  "name": "@fooddupe/types",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "dependencies": {
+    "@fooddupe/database": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
